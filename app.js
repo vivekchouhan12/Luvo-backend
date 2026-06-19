@@ -33,6 +33,51 @@ const store = new MongoDBStore({
   },
 }); 
 
+ let isConnected = false;
+async function connectToDatabase() {
+  // Cache the connection/promise on the global object to survive hot reloads
+  // and to allow reuse across serverless invocations in certain runtimes.
+  if (global._mongooseConnectionPromise) {
+    return global._mongooseConnectionPromise;
+  }
+
+  const connectPromise = mongoose
+    .connect(DB_PATH, {
+      serverSelectionTimeoutMS: 10000,
+      family: 4,
+    })
+    .then(async () => {
+      console.log("Connected to MongoDB");
+      isConnected = true;
+      // Run any lightweight startup tasks (index cleanup) safely.
+      await _cleanupLegacyIndex();
+      return mongoose;
+    })
+    .catch((err) => {
+      console.log("Failed to connect to MongoDB", err);
+      throw err;
+    });
+
+  // store for reuse
+  global._mongooseConnectionPromise = connectPromise;
+  return connectPromise;
+}
+
+app.use( (req, res, next) => {
+  if (!isConnected) {
+    connectToDatabase()
+      .then(() => next())
+      .catch((err) => {
+        console.error("Database connection error:", err);
+        res.status(500).send("Database connection error");
+      });
+  } else {
+    next();
+  }
+});
+
+// Routes must be defined after the database connection middleware
+
 // Local Modules - Must be after upload is defined
 const placeRouter = require("./routes/placesRouter");
 const authRouter = require("./routes/authRouter");
@@ -76,7 +121,7 @@ app.use(errorController.pageNotFound);
   The connection promise is cached on `global` to allow reuse.
 */
 
-const PORT = process.env.PORT || 4000; // used for local dev only
+//const PORT = process.env.PORT || 4000; // used for local dev only
 
 async function _cleanupLegacyIndex() { 
   try {
@@ -95,46 +140,21 @@ async function _cleanupLegacyIndex() {
   }
 }
 
-async function connectToDatabase() {
-  // Cache the connection/promise on the global object to survive hot reloads
-  // and to allow reuse across serverless invocations in certain runtimes.
-  if (global._mongooseConnectionPromise) {
-    return global._mongooseConnectionPromise;
-  }
 
-  const connectPromise = mongoose
-    .connect(DB_PATH, {
-      serverSelectionTimeoutMS: 10000,
-      family: 4,
-    })
-    .then(async () => {
-      console.log("Connected to MongoDB");
-      // Run any lightweight startup tasks (index cleanup) safely.
-      await _cleanupLegacyIndex();
-      return mongoose;
-    })
-    .catch((err) => {
-      console.log("Failed to connect to MongoDB", err);
-      throw err;
-    });
-
-  // store for reuse
-  global._mongooseConnectionPromise = connectPromise;
-  return connectPromise;
-}
-
-// Export the app and connect function for use by `server.js`.
+// Export the app and connect function for external use.
 module.exports = app;
-module.exports.connectToDatabase = connectToDatabase;
+// module.exports.connectToDatabase = connectToDatabase;
 
-/*
-  Example local starter (`server.js`):
-    const app = require('./app');
-    app.connectToDatabase().then(() => {
-      app.listen(process.env.PORT || 4000, () => console.log('Listening'));
-    });
+// // If this file is executed directly, start the server after connecting to the DB.
+// if (require.main === module) {
+//   connectToDatabase()
+//     .then(() => {
+//       const port = process.env.PORT || 4000;
+//       app.listen(port, () => console.log(`Server listening on port ${port}`));
+//     })
+//     .catch((err) => {
+//       console.error('Failed to start server', err);
+//       process.exit(1);
+//     });
+// } 
 
-  For deployments that require a serverless handler, provide a separate
-  entry (for example `api/index.js`) that adapts this app to the target
-  environment. This file intentionally does not include serverless code.
-*/
