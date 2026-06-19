@@ -112,12 +112,12 @@ app.use(session({
 app.use(authRouter);
 app.use(placeRouter);
 // Health check route
-app.get("/", (req, res) => {
+/* app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "Backend is running",
   });
-});
+}); */
 app.use(errorController.pageNotFound);
 
 /*
