@@ -70,15 +70,10 @@ app.use(placeRouter);
 app.use(errorController.pageNotFound);
 
 /*
-  Export the Express `app` instead of calling `app.listen()` here.
-  - For Vercel serverless functions we export a handler that uses this `app`.
-  - For local development, create a small `server.js` that imports
-    `app` and calls `connectToDatabase().then(() => app.listen(...))`.
-
-  Also export `connectToDatabase()` so the caller can control when to
-  open the MongoDB connection. The function uses a global cache so
-  repeated imports in a serverless environment reuse the same
-  connection promise across invocations (avoids exhausting DB connections).
+  Export the Express `app` and `connectToDatabase()` so a separate
+  starter (for example `server.js`) can initialize the database
+  connection and call `app.listen()` for local or production servers.
+  The connection promise is cached on `global` to allow reuse.
 */
 
 const PORT = process.env.PORT || 4000; // used for local dev only
@@ -128,24 +123,18 @@ async function connectToDatabase() {
   return connectPromise;
 }
 
-// Export the app and connect function. For CommonJS compatibility with
-// code that expects `require('./app')` to return the express app, set
-// `module.exports = app` and attach `connectToDatabase` as a property.
+// Export the app and connect function for use by `server.js`.
 module.exports = app;
 module.exports.connectToDatabase = connectToDatabase;
 
 /*
-  Notes for deployment:
-  - On Vercel create an `api/index.js` that imports this file and uses
-    `serverless-http` (or Vercel's Node builder) to export a handler.
-  - Example `api/index.js` (not added here):
-      const serverless = require('serverless-http');
-      const app = require('../app');
-      module.exports = serverless(app);
+  Example local starter (`server.js`):
+    const app = require('./app');
+    app.connectToDatabase().then(() => {
+      app.listen(process.env.PORT || 4000, () => console.log('Listening'));
+    });
 
-  - For local development create `server.js`:
-      const app = require('./app');
-      app.connectToDatabase().then(() => {
-        app.listen(process.env.PORT || 4000, () => console.log('Listening'));
-      });
+  For deployments that require a serverless handler, provide a separate
+  entry (for example `api/index.js`) that adapts this app to the target
+  environment. This file intentionally does not include serverless code.
 */
