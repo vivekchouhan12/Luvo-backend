@@ -151,4 +151,16 @@ async function _cleanupLegacyIndex() {
 module.exports = app;
 module.exports.connectToDatabase = connectToDatabase;
 
+// If this file is executed directly, start the server after connecting to the DB.
+if (require.main === module) {
+  connectToDatabase()
+    .then(() => {
+      const port = process.env.PORT || 4000;
+      app.listen(port, () => console.log(`Server listening on port ${port}`));
+    })
+    .catch((err) => {
+      console.error('Failed to start server', err);
+      process.exit(1);
+    });
+}
 
