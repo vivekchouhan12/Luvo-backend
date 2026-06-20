@@ -36,7 +36,8 @@ exports.signUp = [
   // Terms (BOOLEAN, not "on")
   check("terms")
     .custom((value) => {
-      if (value !== true) {
+      // Accept boolean true, or common form values 'on' / 'true'
+      if (!(value === true || value === "on" || value === "true")) {
         throw new Error("You must accept the terms and conditions.");
       }
       return true;
@@ -54,11 +55,12 @@ exports.signUp = [
       });
     }
 
-    const { username, email, password } = req.body;
+     const { username, email, password } = req.body;
+     const normalizedEmail = (email || "").toLowerCase().trim();
 
-    // hash password
-    bcrypt.hash(password, 12).then(async (hashedPassword) => {
-       const user = new User({ username, email, password: hashedPassword });
+     // hash password
+     bcrypt.hash(password, 12).then(async (hashedPassword) => {
+       const user = new User({ username, email: normalizedEmail, password: hashedPassword });
       await  user.save().catch((err) => {
       console.error("Error saving user:", err);
       return res.status(500).json({ message: "Internal server error" });
@@ -74,7 +76,8 @@ exports.signUp = [
 ];
 
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  const { email: rawEmail, password } = req.body;
+  const email = (rawEmail || "").toLowerCase().trim();
   console.log("Login attempt:", { email });
   const user = await User.findOne({ email });
   if (!user) {
@@ -86,7 +89,10 @@ exports.login = async (req, res) => {
   } 
   req.session.isLoggedIn = true;
   req.session.user = user;
-  await req.session.save();
+  // express-session save uses a callback; wrap it so we can await it safely
+  await new Promise((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
   res.status(200).json({ message: "Logged in successfully" });
 };
 
