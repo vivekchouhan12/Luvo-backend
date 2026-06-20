@@ -83,10 +83,23 @@ const placeRouter = require("./routes/placesRouter");
 const authRouter = require("./routes/authRouter");
 
 // Middleware to parse URL-encoded bodies
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
-}));
+// Allow configuring allowed origins via the ALLOWED_ORIGINS env var
+// e.g. ALLOWED_ORIGINS="http://localhost:5173,https://luvo-frontend-atiq.vercel.app"
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow non-browser requests (postman/server-side)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+      callback(new Error("CORS policy: origin not allowed"));
+    },
+    credentials: true,
+  })
+);
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(express.static(path.join(rootDir, "public")));
